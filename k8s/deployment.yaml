@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loan-origination
+  labels: {app: loan-origination}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: loan-origination}
+  template:
+    metadata:
+      labels: {app: loan-origination}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      initContainers:
+        - name: migrate
+          image: ghcr.io/mayhurjoker007/loan-origination-api:latest
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom: [{secretRef: {name: loan-origination}}]
+      containers:
+        - name: api
+          image: ghcr.io/mayhurjoker007/loan-origination-api:latest
+          ports: [{containerPort: 8000}]
+          env:
+            - {name: DJANGO_DEBUG, value: "false"}
+            - {name: DJANGO_ALLOWED_HOSTS, value: "loans.example.internal"}
+          envFrom: [{secretRef: {name: loan-origination}}]     # DATABASE_URL, DJANGO_SECRET_KEY
+          readinessProbe: {httpGet: {path: /healthz, port: 8000}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: 8000}, periodSeconds: 15}
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {memory: 384Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loan-origination
+spec:
+  selector: {app: loan-origination}
+  ports: [{port: 80, targetPort: 8000}]

@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: loans
+      POSTGRES_PASSWORD: loans
+      POSTGRES_DB: loans
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "loans"]
+      interval: 2s
+      retries: 15
+  api:
+    build: .
+    command: sh -c "python manage.py migrate && gunicorn config.wsgi --bind 0.0.0.0:8000 --workers 3"
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres://loans:loans@db:5432/loans
+      DJANGO_SECRET_KEY: change-me-for-anything-real
+      DJANGO_DEBUG: "false"
+    depends_on:
+      db:
+        condition: service_healthy
